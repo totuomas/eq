@@ -1,6 +1,6 @@
 body {
-  width: 440px;
-  height: 280px;
+  width: 700px;      /* much wider */
+  height: 180px;     /* shorter */
   margin: 0;
   background: #0e0e0e;
   display: flex;
@@ -13,4 +13,6 @@ canvas {
   border: 1px solid #333;
   border-radius: 6px;
   cursor: crosshair;
+  width: 680px;      /* match wider layout */
+  height: 160px;     /* match shorter layout */
 }

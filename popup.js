@@ -4,14 +4,13 @@ const ctx = canvas.getContext("2d");
 let currentTabId = null;
 let draggingPoint = null;
 
-// Start with 3 default points
-let points = [
-  { x: 60, y: 130 },
-  { x: 200, y: 130 },
-  { x: 340, y: 130 }
-];
+// Initial points
+let points = [ { x: 100, y: 80 }, { x: 340, y: 80 }, { x: 580, y: 80 } ];
 
-// Load tab + saved state
+// Frequency data for bars
+let frequencyData = new Array(64).fill(0);
+
+// Load current tab + saved points
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   currentTabId = tabs[0].id;
 
@@ -19,178 +18,32 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (data[currentTabId]?.points) {
       points = data[currentTabId].points;
     }
-
     draw();
     sendEQ();
   });
 });
 
-// 🎯 Convert Y ↔ Gain
-function yToGain(y) {
-  return Math.round((canvas.height / 2 - y) / 3);
-}
+// Receive real-time audio data
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "AUDIO_DATA") {
+    frequencyData = msg.data;
+  }
+});
 
-// 🎯 Convert X → frequency (log scale)
+// Map X → frequency
 function xToFrequency(x) {
   const min = 20;
   const max = 20000;
-
   const percent = x / canvas.width;
   return min * Math.pow(max / min, percent);
 }
 
-// 🎨 Smooth curve (Catmull-Rom)
-function drawSmoothCurve() {
-  if (points.length < 2) return;
-
-  ctx.strokeStyle = "#00ff88";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i - 1] || points[i];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[i + 2] || p2;
-
-    for (let t = 0; t < 1; t += 0.05) {
-      const t2 = t * t;
-      const t3 = t2 * t;
-
-      const x =
-        0.5 *
-        ((2 * p1.x) +
-          (-p0.x + p2.x) * t +
-          (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-          (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
-
-      const y =
-        0.5 *
-        ((2 * p1.y) +
-          (-p0.y + p2.y) * t +
-          (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-          (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
-
-      if (i === 0 && t === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-  }
-
-  ctx.stroke();
+// Map Y → gain
+function yToGain(y) {
+  return Math.round((canvas.height / 2 - y) / 2.5);
 }
 
-// 🎨 Draw everything
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Grid
-  ctx.strokeStyle = "#2a2a2a";
-  ctx.lineWidth = 1;
-
-  for (let i = 0; i <= canvas.height; i += 40) {
-    ctx.beginPath();
-    ctx.moveTo(0, i);
-    ctx.lineTo(canvas.width, i);
-    ctx.stroke();
-  }
-
-  for (let i = 0; i <= canvas.width; i += 60) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i, canvas.height);
-    ctx.stroke();
-  }
-
-  // Mid line (0 dB)
-  ctx.strokeStyle = "#444";
-  ctx.beginPath();
-  ctx.moveTo(0, canvas.height / 2);
-  ctx.lineTo(canvas.width, canvas.height / 2);
-  ctx.stroke();
-
-  // Sort before drawing
-  points.sort((a, b) => a.x - b.x);
-
-  drawSmoothCurve();
-
-  // Draw points
-  points.forEach(p => {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
-    ctx.fillStyle = "#00ff88";
-    ctx.fill();
-  });
-}
-
-// 🖱 START DRAG
-canvas.addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return;
-
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-
-  draggingPoint = points.find(p =>
-    Math.hypot(p.x - mx, p.y - my) < 12
-  );
-});
-
-// 🖱 DRAGGING
-canvas.addEventListener("mousemove", (e) => {
-  if (!draggingPoint) return;
-
-  const rect = canvas.getBoundingClientRect();
-  let mx = e.clientX - rect.left;
-  let my = e.clientY - rect.top;
-
-  // Clamp
-  mx = Math.max(0, Math.min(canvas.width, mx));
-  my = Math.max(0, Math.min(canvas.height, my));
-
-  draggingPoint.x = mx;
-  draggingPoint.y = my;
-
-  // Keep order stable
-  points.sort((a, b) => a.x - b.x);
-
-  draw();
-  sendEQ();
-});
-
-// 🖱 STOP DRAG
-canvas.addEventListener("mouseup", () => draggingPoint = null);
-canvas.addEventListener("mouseleave", () => draggingPoint = null);
-
-// 🖱 RIGHT CLICK → add/remove
-canvas.addEventListener("contextmenu", (e) => {
-  e.preventDefault();
-
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-
-  const index = points.findIndex(p =>
-    Math.hypot(p.x - mx, p.y - my) < 12
-  );
-
-  if (index !== -1) {
-    if (points.length > 2) {
-      points.splice(index, 1);
-    }
-  } else {
-    points.push({ x: mx, y: my });
-  }
-
-  points.sort((a, b) => a.x - b.x);
-
-  draw();
-  sendEQ();
-});
-
-// 🚀 Send EQ data
+// Send EQ data to content.js
 function sendEQ() {
   if (currentTabId === null) return;
 
@@ -199,12 +52,176 @@ function sendEQ() {
     gain: yToGain(p.y)
   }));
 
-  chrome.storage.local.set({
-    [currentTabId]: { points }
-  });
-
+  chrome.storage.local.set({ [currentTabId]: { points } });
   chrome.tabs.sendMessage(currentTabId, { bands });
 }
 
-// Initial draw
-draw();
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // --- Grid ---
+  ctx.strokeStyle = "rgba(255,255,255,0.15)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= canvas.height; i += 40) {
+    ctx.beginPath();
+    ctx.moveTo(0, i);
+    ctx.lineTo(canvas.width, i);
+    ctx.stroke();
+  }
+  for (let i = 0; i <= canvas.width; i += 60) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, canvas.height);
+    ctx.stroke();
+  }
+
+  // --- Midline ---
+  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height / 2);
+  ctx.lineTo(canvas.width, canvas.height / 2);
+  ctx.stroke();
+
+  // --- Rainbow bars with visible top, left, and right lines ---
+  const barCount = Math.min(frequencyData.length, 50);
+  const barWidth = canvas.width / barCount;
+
+  for (let i = 0; i < barCount; i++) {
+    const x = i * barWidth;
+    const value = frequencyData[i];
+    const height = (value / 255) * (canvas.height - 20);
+
+    // Bar fill color
+    const hue = (i / barCount) * 360;
+    ctx.fillStyle = `hsla(${hue}, 80%, 50%, 0.25)`;
+    const width = i === barCount - 1 ? canvas.width - x : barWidth;
+    ctx.fillRect(x, canvas.height - height, width, height);
+
+    // White lines on top, left, and right (drawn after fill)
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+
+    // Top line
+    ctx.moveTo(x, canvas.height - height);
+    ctx.lineTo(x + width, canvas.height - height);
+
+    // Left line (all bars)
+    ctx.moveTo(x, canvas.height - height);
+    ctx.lineTo(x, canvas.height);
+
+    // Right line
+    ctx.moveTo(x + width, canvas.height - height);
+    ctx.lineTo(x + width, canvas.height);
+
+    ctx.stroke();
+  }
+
+  // --- Smooth curve points using Catmull-Rom ---
+  points.sort((a, b) => a.x - b.x);
+  const curvePoints = [];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+
+    for (let t = 0; t <= 1; t += 0.05) {
+      const t2 = t * t;
+      const t3 = t2 * t;
+
+      const x = 0.5 * ((2*p1.x) + (-p0.x + p2.x)*t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x)*t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x)*t3);
+      const y = 0.5 * ((2*p1.y) + (-p0.y + p2.y)*t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y)*t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y)*t3);
+
+      curvePoints.push({ x, y });
+    }
+  }
+
+  // Include first and last points explicitly
+  if (points.length) {
+    curvePoints.unshift({ x: points[0].x, y: points[0].y });
+    curvePoints.push({ x: points[points.length - 1].x, y: points[points.length - 1].y });
+  }
+
+  // --- Fill under curve ---
+  if (curvePoints.length) {
+    ctx.beginPath();
+    ctx.moveTo(curvePoints[0].x, canvas.height / 2);
+    curvePoints.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(curvePoints[curvePoints.length - 1].x, canvas.height / 2);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(0, 255, 255, 0.15)";
+    ctx.fill();
+  }
+
+  // --- Curve line with glow ---
+  if (curvePoints.length) {
+    ctx.save();
+    ctx.shadowColor = "rgba(0,255,255,0.7)";
+    ctx.shadowBlur = 8;
+    ctx.strokeStyle = "#0ff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(curvePoints[0].x, curvePoints[0].y);
+    curvePoints.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // --- Draw draggable points ---
+  points.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = draggingPoint === p ? "#0ff" : "#fff";
+    ctx.fill();
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  requestAnimationFrame(draw);
+}
+
+// --- Mouse events ---
+canvas.addEventListener("mousedown", e => {
+  if(e.button !== 0) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  draggingPoint = points.find(p => Math.hypot(p.x - mx, p.y - my) < 12);
+});
+
+canvas.addEventListener("mousemove", e => {
+  if (!draggingPoint) return;
+  const rect = canvas.getBoundingClientRect();
+  let mx = e.clientX - rect.left;
+  let my = e.clientY - rect.top;
+
+  // Clamp points to canvas
+  mx = Math.max(0, Math.min(canvas.width, mx));
+  my = Math.max(0, Math.min(canvas.height, my));
+
+  draggingPoint.x = mx;
+  draggingPoint.y = my;
+
+  points.sort((a, b) => a.x - b.x);
+  sendEQ();
+});
+
+canvas.addEventListener("mouseup", () => draggingPoint = null);
+canvas.addEventListener("mouseleave", () => draggingPoint = null);
+
+// Right-click add/remove
+canvas.addEventListener("contextmenu", e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const index = points.findIndex(p => Math.hypot(p.x - mx, p.y - my) < 12);
+  if (index !== -1 && points.length > 2) points.splice(index, 1);
+  else points.push({ x: mx, y: my });
+  points.sort((a, b) => a.x - b.x);
+  sendEQ();
+});

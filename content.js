@@ -1,7 +1,8 @@
-// content.js
 let audioCtx;
 let source;
 let filters = [];
+let analyser;
+let dataArray;
 
 // Initialize EQ for a video element
 function initEQ(video) {
@@ -10,15 +11,33 @@ function initEQ(video) {
   audioCtx = new AudioContext();
   source = audioCtx.createMediaElementSource(video);
 
-  // Initially connect directly to destination
-  source.connect(audioCtx.destination);
+  // Create analyser for visualization
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 128;
+  dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+  // Initially connect source -> analyser -> destination
+  source.connect(analyser);
+  analyser.connect(audioCtx.destination);
+
+  // Connect filters if any exist
+  if (filters.length > 0) {
+    let node = source;
+    filters.forEach(f => {
+      node.connect(f);
+      node = f;
+    });
+    node.connect(analyser);
+  }
+
+  // Start sending audio data
+  sendAudioData();
 }
 
-// Apply dynamic bands
+// Update EQ bands
 function updateEQ(bands) {
   if (!audioCtx || !source) return;
 
-  // If filter count changed (add/remove band), rebuild filters
   if (filters.length !== bands.length) {
     try {
       source.disconnect();
@@ -27,48 +46,50 @@ function updateEQ(bands) {
 
     filters = bands.map(b => {
       const f = audioCtx.createBiquadFilter();
-      f.type = "peaking"; // generic EQ band
+      f.type = "peaking";
       f.frequency.value = b.freq;
       f.Q.value = 1;
-
-      // Initialize gain smoothly
       f.gain.setTargetAtTime(b.gain, audioCtx.currentTime, 0.01);
-
       return f;
     });
 
-    // Connect source → filters → destination
     let node = source;
     filters.forEach(f => {
       node.connect(f);
       node = f;
     });
-    node.connect(audioCtx.destination);
+    node.connect(analyser);
   } else {
-    // Only update gains smoothly
     bands.forEach((b, i) => {
       if (!filters[i]) return;
       filters[i].gain.setTargetAtTime(b.gain, audioCtx.currentTime, 0.01);
-      filters[i].frequency.value = b.freq; // optional: update frequency if band moves horizontally
+      filters[i].frequency.value = b.freq;
     });
   }
+}
+
+// Send audio data to popup
+function sendAudioData() {
+  if (!analyser) return;
+  analyser.getByteFrequencyData(dataArray);
+  chrome.runtime.sendMessage({ type: "AUDIO_DATA", data: Array.from(dataArray) });
+  requestAnimationFrame(sendAudioData);
 }
 
 // Helpers to map UI coords → audio values
 function xToFrequency(x) {
   const min = 20;
   const max = 20000;
-  const canvasWidth = 420; // match your popup canvas width
-  const percent = x / canvasWidth;
+  const percent = x / 420; // popup canvas width
   return min * Math.pow(max / min, percent);
 }
 
 function yToGain(y) {
-  const canvasHeight = 260; // match popup canvas height
-  return Math.round((canvasHeight / 2 - y) / 3); // same scale as popup
+  const canvasHeight = 260;
+  return Math.round((canvasHeight / 2 - y) / 3);
 }
 
-// Detect YouTube video element (SPA)
+// Detect YouTube video
 function getVideo() {
   return document.querySelector("video");
 }
@@ -81,11 +102,10 @@ const observer = new MutationObserver(() => {
 
 observer.observe(document.body, { childList: true, subtree: true });
 
-// Try immediately in case video already exists
 const initialVideo = getVideo();
 if (initialVideo) initEQ(initialVideo);
 
-// Listen for messages from popup
+// Listen for EQ updates from popup
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.bands) {
     updateEQ(msg.bands);
