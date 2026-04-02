@@ -1,76 +1,93 @@
+// content.js
 let audioCtx;
 let source;
+let filters = [];
 
-let bassFilter, midFilter, trebleFilter;
-
-// Initialize EQ
+// Initialize EQ for a video element
 function initEQ(video) {
   if (audioCtx) return;
 
   audioCtx = new AudioContext();
   source = audioCtx.createMediaElementSource(video);
 
-  bassFilter = audioCtx.createBiquadFilter();
-  bassFilter.type = "lowshelf";
-  bassFilter.frequency.value = 100;
-
-  midFilter = audioCtx.createBiquadFilter();
-  midFilter.type = "peaking";
-  midFilter.frequency.value = 1000;
-  midFilter.Q.value = 1;
-
-  trebleFilter = audioCtx.createBiquadFilter();
-  trebleFilter.type = "highshelf";
-  trebleFilter.frequency.value = 3000;
-
-  source
-    .connect(bassFilter)
-    .connect(midFilter)
-    .connect(trebleFilter)
-    .connect(audioCtx.destination);
-
-  // Apply saved settings after init
-  applySavedEQ();
+  // Initially connect directly to destination
+  source.connect(audioCtx.destination);
 }
 
-function applySavedEQ() {
-  chrome.runtime.sendMessage({ type: "GET_TAB_ID" }, (tabId) => {
-    chrome.storage.local.get([String(tabId)], (data) => {
-      const settings = data[tabId] || {};
+// Apply dynamic bands
+function updateEQ(bands) {
+  if (!audioCtx || !source) return;
 
-      bassFilter.gain.value = Number(settings.bass) || 0;
-      midFilter.gain.value = Number(settings.mid) || 0;
-      trebleFilter.gain.value = Number(settings.treble) || 0;
+  // If filter count changed (add/remove band), rebuild filters
+  if (filters.length !== bands.length) {
+    try {
+      source.disconnect();
+      filters.forEach(f => f.disconnect());
+    } catch {}
+
+    filters = bands.map(b => {
+      const f = audioCtx.createBiquadFilter();
+      f.type = "peaking"; // generic EQ band
+      f.frequency.value = b.freq;
+      f.Q.value = 1;
+
+      // Initialize gain smoothly
+      f.gain.setTargetAtTime(b.gain, audioCtx.currentTime, 0.01);
+
+      return f;
     });
-  });
+
+    // Connect source → filters → destination
+    let node = source;
+    filters.forEach(f => {
+      node.connect(f);
+      node = f;
+    });
+    node.connect(audioCtx.destination);
+  } else {
+    // Only update gains smoothly
+    bands.forEach((b, i) => {
+      if (!filters[i]) return;
+      filters[i].gain.setTargetAtTime(b.gain, audioCtx.currentTime, 0.01);
+      filters[i].frequency.value = b.freq; // optional: update frequency if band moves horizontally
+    });
+  }
 }
 
-// Detect YouTube video element
+// Helpers to map UI coords → audio values
+function xToFrequency(x) {
+  const min = 20;
+  const max = 20000;
+  const canvasWidth = 420; // match your popup canvas width
+  const percent = x / canvasWidth;
+  return min * Math.pow(max / min, percent);
+}
+
+function yToGain(y) {
+  const canvasHeight = 260; // match popup canvas height
+  return Math.round((canvasHeight / 2 - y) / 3); // same scale as popup
+}
+
+// Detect YouTube video element (SPA)
 function getVideo() {
   return document.querySelector("video");
 }
 
-// Watch for video changes (YouTube is SPA)
+// Watch for video changes
 const observer = new MutationObserver(() => {
   const video = getVideo();
-  if (video) {
-    initEQ(video);
-  }
+  if (video) initEQ(video);
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
 
-// Also try immediately (in case video already exists)
+// Try immediately in case video already exists
 const initialVideo = getVideo();
-if (initialVideo) {
-  initEQ(initialVideo);
-}
+if (initialVideo) initEQ(initialVideo);
 
-// Listen for popup slider updates
+// Listen for messages from popup
 chrome.runtime.onMessage.addListener((msg) => {
-  if (!bassFilter) return;
-
-  bassFilter.gain.value = Number(msg.bass) || 0;
-  midFilter.gain.value = Number(msg.mid) || 0;
-  trebleFilter.gain.value = Number(msg.treble) || 0;
+  if (msg.bands) {
+    updateEQ(msg.bands);
+  }
 });
