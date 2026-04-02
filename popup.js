@@ -5,7 +5,7 @@ let currentTabId = null;
 let draggingPoint = null;
 
 // Initial points
-let points = [ { x: 100, y: 80 }, { x: 340, y: 80 }, { x: 580, y: 80 } ];
+let points = [ { x: 0, y: 80 }, { x: 310, y: 80 }, { x: 620, y: 80 } ];
 
 // Frequency data for bars
 let frequencyData = new Array(64).fill(0);
@@ -186,22 +186,32 @@ function draw() {
 
 // --- Mouse events ---
 canvas.addEventListener("mousedown", e => {
-  if(e.button !== 0) return;
+  if (e.button !== 0) return;
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
   draggingPoint = points.find(p => Math.hypot(p.x - mx, p.y - my) < 12);
 });
 
-canvas.addEventListener("mousemove", e => {
+window.addEventListener("mousemove", e => {
   if (!draggingPoint) return;
   const rect = canvas.getBoundingClientRect();
   let mx = e.clientX - rect.left;
   let my = e.clientY - rect.top;
 
-  // Clamp points to canvas
-  mx = Math.max(0, Math.min(canvas.width, mx));
+  // Clamp Y always
   my = Math.max(0, Math.min(canvas.height, my));
+
+  // Clamp X for non-edge points
+  if (draggingPoint === points[0]) {
+    // first point locked to very left
+    mx = 0;
+  } else if (draggingPoint === points[points.length - 1]) {
+    // last point locked to very right
+    mx = canvas.width;
+  } else {
+    mx = Math.max(0, Math.min(canvas.width, mx));
+  }
 
   draggingPoint.x = mx;
   draggingPoint.y = my;
@@ -210,8 +220,7 @@ canvas.addEventListener("mousemove", e => {
   sendEQ();
 });
 
-canvas.addEventListener("mouseup", () => draggingPoint = null);
-canvas.addEventListener("mouseleave", () => draggingPoint = null);
+window.addEventListener("mouseup", () => draggingPoint = null);
 
 // Right-click add/remove
 canvas.addEventListener("contextmenu", e => {
