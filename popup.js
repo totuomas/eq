@@ -234,3 +234,47 @@ canvas.addEventListener("contextmenu", e => {
   points.sort((a, b) => a.x - b.x);
   sendEQ();
 });
+
+const resetBtn = document.getElementById("resetBtn");
+resetBtn.addEventListener("click", () => {
+  // Reset points to middle line
+  points = [
+    { x: 0, y: canvas.height / 2 },
+    { x: canvas.width / 2, y: canvas.height / 2 },
+    { x: canvas.width, y: canvas.height / 2 }
+  ];
+  sendEQ();
+});
+
+const presetSelect = document.getElementById("presetSelect");
+
+presetSelect.addEventListener("change", () => {
+  const preset = presetSelect.value;
+  if (!preset) return;
+
+  switch (preset) {
+    case "flat":
+      points = [
+        { x: 0, y: canvas.height / 2 },
+        { x: canvas.width / 2, y: canvas.height / 2 },
+        { x: canvas.width, y: canvas.height / 2 }
+      ];
+      break;
+    case "bassBoost":
+      points = [
+        { x: 0, y: canvas.height / 3 },       // Boost bass
+        { x: canvas.width / 2, y: canvas.height / 2 },
+        { x: canvas.width, y: canvas.height / 2 }
+      ];
+      break;
+    case "trebleBoost":
+      points = [
+        { x: 0, y: canvas.height / 2 },
+        { x: canvas.width / 2, y: canvas.height / 2 },
+        { x: canvas.width, y: canvas.height / 3 } // Boost treble
+      ];
+      break;
+  }
+
+  sendEQ();
+});

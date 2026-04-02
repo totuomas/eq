@@ -1,18 +1,49 @@
+/* Import Bungee font */
+@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');
+
 body {
-  width: 640px;      /* much wider */
-  height: 180px;     /* shorter */
+  width: 640px;
+  height: 200px;            /* slightly taller to fit controls */
   margin: 0;
   background: #0e0e0e;
   display: flex;
+  flex-direction: column;   /* stack canvas and controls vertically */
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding: 10px;
+  box-sizing: border-box;
+
+  /* Apply Bungee */
+  font-family: 'Bungee', sans-serif;
 }
 
 canvas {
   background: #181818;
   border: 1px solid #333;
-  border-radius: 6px;
   cursor: crosshair;
-  width: 620px;      /* match wider layout */
-  height: 160px;     /* match shorter layout */
+  width: 620px;
+  height: 160px;
+}
+
+.controls {
+  padding-top: 10px;
+  margin-top: auto;         /* push to bottom */
+  display: flex;
+  gap: 10px;                /* spacing between button and select */
+  justify-content: flex-end;  /* align controls to the right */
+  width: 100%;
+  padding-bottom: 10px;     /* spacing from bottom */
+}
+
+button, select {
+  background: #222;
+  color: #fff;
+  border: 1px solid #555;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: 'Bungee', sans-serif; /* force preset font */
+}
+
+button:hover, select:hover {
+  border-color: #888;
 }
