@@ -86,7 +86,7 @@ function xToFrequency(x) {
 
 function yToGain(y) {
   const canvasHeight = 260;
-  return Math.round((canvasHeight / 2 - y) / 3);
+  return Math.round((canvasHeight / 2 - y) / 4);
 }
 
 // Detect YouTube video
@@ -109,5 +109,37 @@ if (initialVideo) initEQ(initialVideo);
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.bands) {
     updateEQ(msg.bands);
+  }
+});
+
+let eqActive = true; // initially active
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "TOGGLE_EQ") {
+    eqActive = msg.enabled;
+    // Connect/disconnect filters dynamically
+    if (audioCtx && source) {
+      try {
+        source.disconnect();
+        filters.forEach(f => f.disconnect());
+        analyser.disconnect();
+
+        if (eqActive) {
+          // Connect filters -> analyser -> destination
+          let node = source;
+          filters.forEach(f => {
+            node.connect(f);
+            node = f;
+          });
+          node.connect(analyser);
+        } else {
+          // Bypass filters: source -> analyser -> destination
+          source.connect(analyser);
+        }
+        analyser.connect(audioCtx.destination);
+      } catch (e) {
+        console.error("EQ toggle error:", e);
+      }
+    }
   }
 });

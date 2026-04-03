@@ -3,17 +3,15 @@
 
 body {
   width: 640px;
-  height: 200px;            /* slightly taller to fit controls */
+  height: 200px;
   margin: 0;
   background: #0e0e0e;
   display: flex;
-  flex-direction: column;   /* stack canvas and controls vertically */
+  flex-direction: column;
   align-items: center;
   justify-content: flex-start;
   padding: 10px;
   box-sizing: border-box;
-
-  /* Apply Bungee */
   font-family: 'Bungee', sans-serif;
 }
 
@@ -25,14 +23,21 @@ canvas {
   height: 160px;
 }
 
+canvas.disabled {
+  opacity: 0.3;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
 .controls {
   padding-top: 10px;
-  margin-top: auto;         /* push to bottom */
+  margin-top: auto;
   display: flex;
-  gap: 10px;                /* spacing between button and select */
-  justify-content: flex-end;  /* align controls to the right */
+  gap: 10px;
+  justify-content: flex-start; /* left-aligned controls */
   width: 100%;
-  padding-bottom: 10px;     /* spacing from bottom */
+  padding-bottom: 10px;
+  align-items: center;
 }
 
 button, select {
@@ -41,9 +46,64 @@ button, select {
   border: 1px solid #555;
   padding: 5px 10px;
   cursor: pointer;
-  font-family: 'Bungee', sans-serif; /* force preset font */
+  font-family: 'Bungee', sans-serif;
 }
 
 button:hover, select:hover {
   border-color: #888;
+}
+
+/* --------------------------
+   Toggle Switch Styles
+   -------------------------- */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 30px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0;
+  right: 0; bottom: 0;
+  background-color: #da4f4f; /* RED when OFF */
+  transition: 0.4s;
+  border-radius: 30px;
+  border: 2px solid #ffffff; /* thicker border */
+}
+
+/* Knob */
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 2px;
+  background-color: #0e0e0e;
+  transition: 0.4s;
+  border-radius: 50%;
+  border: 2px solid #ffffff; /* red border for OFF */
+}
+
+/* Checked state: Green, no glow */
+input:checked + .slider {
+  background-color: #00ff88; /* green */
+  border-color: #ffffff;
+  box-shadow: none;
+}
+
+input:checked + .slider:before {
+  transform: translateX(28px);
+  background-color: #0e0e0e;
+  border-color: #ffffff;
+  box-shadow: none;
 }

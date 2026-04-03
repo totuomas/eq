@@ -4,10 +4,15 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <canvas id="eqCanvas" width="620" height="160"></canvas>
+  <canvas id="eqCanvas" width="620" height="160" class="disabled"></canvas>
 
   <!-- Controls below canvas -->
   <div class="controls">
+    <label class="switch">
+      <input type="checkbox" id="toggleBtn">
+      <span class="slider"></span>
+    </label>
+
     <button id="resetBtn">Reset</button>
     <select id="presetSelect">
       <option value="">--None--</option>

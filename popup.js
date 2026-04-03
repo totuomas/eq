@@ -10,14 +10,22 @@ let points = [ { x: 0, y: 80 }, { x: 310, y: 80 }, { x: 620, y: 80 } ];
 // Frequency data for bars
 let frequencyData = new Array(64).fill(0);
 
-// Load current tab + saved points
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   currentTabId = tabs[0].id;
 
-  chrome.storage.local.get([String(currentTabId)], (data) => {
+  // Load saved points
+  chrome.storage.local.get([String(currentTabId), `eqEnabled_${currentTabId}`], (data) => {
     if (data[currentTabId]?.points) {
       points = data[currentTabId].points;
     }
+
+    // Load saved toggle state
+    eqEnabled = data[`eqEnabled_${currentTabId}`] ?? false; // default false
+
+    // Update canvas & button
+    canvas.classList.toggle("disabled", !eqEnabled);
+    toggleBtn.textContent = eqEnabled ? "Disable EQ" : "Enable EQ";
+
     draw();
     sendEQ();
   });
@@ -277,4 +285,27 @@ presetSelect.addEventListener("change", () => {
   }
 
   sendEQ();
+});
+
+const toggleBtn = document.getElementById("toggleBtn");
+let eqEnabled = false; // default EQ state
+
+toggleBtn.addEventListener("click", () => {
+  eqEnabled = !eqEnabled;
+
+  // Save state per tab
+  if (currentTabId !== null) {
+    chrome.storage.local.set({ [`eqEnabled_${currentTabId}`]: eqEnabled });
+  }
+
+  // Update badge
+  chrome.action.setBadgeText({ text: eqEnabled ? "on" : "off", tabId: currentTabId });
+
+  // Enable/disable canvas
+  canvas.classList.toggle("disabled", !eqEnabled);
+
+  // Notify content script
+  if (currentTabId !== null) {
+    chrome.tabs.sendMessage(currentTabId, { type: "TOGGLE_EQ", enabled: eqEnabled });
+  }
 });
